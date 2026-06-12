@@ -105,6 +105,10 @@ def _make_id(date, title, course):
     return int(h[:12], 16)
 
 
+_GENERIC_EXAM = {"기말고사", "중간고사", "정기고사", "기말시험", "중간시험",
+                 "시험", "고사", "퀴즈", "quiz", "exam", "테스트", "test"}
+
+
 def clean_payload(events_map):
     """받은 일정에서 가짜 제목 제거 + 같은 과목/제목 중복을 1건으로. manual 은 보존."""
     if not isinstance(events_map, dict):
@@ -123,10 +127,14 @@ def clean_payload(events_map):
     groups = []
     for d, ev in auto:
         for g in groups:
-            _gd, ge = g[0]
+            gd, ge = g[0]
+            ce = (ge.get("course") or "").strip()
+            cv = (ev.get("course") or "").strip()
             same_c = _same_course(ge.get("course"), ev.get("course"))
-            both_empty = not (ge.get("course") or "").strip() and not (ev.get("course") or "").strip()
-            if (same_c or both_empty) and _title_match(ge.get("title"), ev.get("title")):
+            both_empty = (not ce) and (not cv)
+            one_empty = (not ce) != (not cv)
+            if _title_match(ge.get("title"), ev.get("title")) and \
+               (same_c or both_empty or (one_empty and d == gd)):
                 g.append((d, ev))
                 break
         else:
@@ -136,12 +144,20 @@ def clean_payload(events_map):
     for d, ev in manual:
         out.setdefault(d, []).append(ev)
     for g in groups:
-        g.sort(key=lambda x: (x[1].get("time", "") == "", -len(x[1].get("title", ""))))
+        g.sort(key=lambda x: (x[1].get("time", "") == "",
+                              not (x[1].get("course") or "").strip(),
+                              -len(x[1].get("title", ""))))
         d, base = g[0]
         base = dict(base)
         base["done"] = any(e.get("done") for _, e in g)
         base["course"] = _clean_course(base.get("course", ""))
         base["kind"] = _kind_from_text(base.get("title")) or base.get("kind") or "assignment"
+        _t = (base.get("title") or "").strip()
+        if _t in _GENERIC_EXAM:
+            _c = (base.get("course") or "").strip()
+            if not _c:
+                continue
+            base["title"] = f"{_c} {_t}"
         base["id"] = _make_id(d, base.get("title", ""), base.get("course", ""))
         out.setdefault(d, []).append(base)
     for d in out:
