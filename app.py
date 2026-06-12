@@ -49,6 +49,8 @@ def is_junk_title(title):
         return True
     if any(ph in t for ph in _JUNK_PHRASES):
         return True
+    if "성적" in t or "채점 결과" in t or "평가 결과" in t:
+        return True
     if _ROMAN_RE.match(t):
         return True
     if re.match(r"^[A-Za-z]{2,8}\d*_", t):          # CENB102_..., CVL203_...
