@@ -84,11 +84,20 @@ def _title_match(a, b):
 
 def _kind_from_text(text):
     t = (text or "").lower()
+    if any(w.lower() in t for w in ASSIGN_KW):      # '과제' 우선(기말고사대체과제=과제)
+        return "assignment"
     if any(w.lower() in t for w in EXAM_STRONG):
         return "exam"
-    if any(w.lower() in t for w in ASSIGN_KW):
-        return "assignment"
     return None
+
+
+def _clean_course(raw):
+    s = (raw or "").strip()
+    if ":" in s:
+        s = s.split(":", 1)[-1].strip()
+    s = re.sub(r"^[A-Za-z0-9.\-]+_\s*", "", s)
+    s = re.sub(r"\([^)]*\)\s*$", "", s)
+    return s.strip()
 
 
 def _make_id(date, title, course):
@@ -127,10 +136,11 @@ def clean_payload(events_map):
     for d, ev in manual:
         out.setdefault(d, []).append(ev)
     for g in groups:
-        g.sort(key=lambda x: (x[1].get("time", "") == "",))
+        g.sort(key=lambda x: (x[1].get("time", "") == "", -len(x[1].get("title", ""))))
         d, base = g[0]
         base = dict(base)
         base["done"] = any(e.get("done") for _, e in g)
+        base["course"] = _clean_course(base.get("course", ""))
         base["kind"] = _kind_from_text(base.get("title")) or base.get("kind") or "assignment"
         base["id"] = _make_id(d, base.get("title", ""), base.get("course", ""))
         out.setdefault(d, []).append(base)
